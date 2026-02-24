@@ -1,0 +1,20 @@
+{
+    "identifier": "default",
+    "description": "Default capability for DevFlow Studio",
+    "windows": [
+        "main"
+    ],
+    "permissions": [
+        "core:default",
+        "core:path:default",
+        "core:event:default",
+        "core:window:default",
+        "core:app:default",
+        "shell:default",
+        "dialog:default",
+        "dialog:allow-open",
+        "dialog:allow-save",
+        "fs:default",
+        "sql:default"
+    ]
+}

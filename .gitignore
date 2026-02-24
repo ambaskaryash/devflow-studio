@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+target/
+*.sqlite
+*.db
+.env
+.env.local
+.DS_Store
+*.log
+apps/desktop/src-tauri/target/

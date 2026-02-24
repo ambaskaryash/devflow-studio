@@ -1,0 +1,29 @@
+{
+  "name": "devflow-studio",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/ui",
+    "apps/desktop",
+    "core/flow-engine",
+    "core/executor",
+    "core/detectors",
+    "packages/ui-components",
+    "packages/plugin-sdk"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/ui",
+    "build": "npm run build --workspace=apps/ui",
+    "tauri": "npm run tauri --workspace=@devflow/desktop",
+    "typecheck": "tsc -b",
+    "lint": "eslint . --ext .ts,.tsx",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "@types/node": "^20.14.0",
+    "eslint": "^9.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.4"
+  }
+}

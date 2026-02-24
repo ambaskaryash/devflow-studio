@@ -1,0 +1,21 @@
+{
+    "name": "@devflow/plugin-sdk",
+    "version": "0.1.0",
+    "description": "Official SDK for building DevFlow Studio plugins",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "scripts": {
+        "build": "tsc"
+    },
+    "keywords": [
+        "devflow",
+        "sdk",
+        "plugin",
+        "devops"
+    ],
+    "author": "DevFlow Studio",
+    "license": "MIT",
+    "devDependencies": {
+        "typescript": "^5.4.5"
+    }
+}
