@@ -159,3 +159,116 @@ registerNode({
     ],
 });
 
+// ── New P0 Node Types ──────────────────────────────────────────────────────────
+
+registerNode({
+    type: 'npmRun',
+    label: 'NPM Script',
+    icon: '📦',
+    colorClass: 'from-red-600/20 to-red-800/10 border-red-600/40',
+    headerBgClass: 'bg-red-600/30',
+    hoverClass: 'hover:bg-red-900/20 hover:border-red-600/40 hover:text-red-400',
+    executionHandler: 'npmRunHandler',
+    defaultConfig: { script: 'build', packageDir: '' },
+    configSchema: [
+        { key: 'script', label: 'Script Name', type: 'text', placeholder: 'build', mono: true },
+        { key: 'packageDir', label: 'Package Directory', type: 'text', placeholder: './apps/ui', mono: true },
+    ],
+});
+
+registerNode({
+    type: 'pipInstall',
+    label: 'Pip Install',
+    icon: '🐍',
+    colorClass: 'from-yellow-600/20 to-yellow-800/10 border-yellow-600/40',
+    headerBgClass: 'bg-yellow-600/30',
+    hoverClass: 'hover:bg-yellow-900/20 hover:border-yellow-600/40 hover:text-yellow-400',
+    executionHandler: 'pipInstallHandler',
+    defaultConfig: { requirements: 'requirements.txt', venv: false, venvDir: '.venv' },
+    configSchema: [
+        { key: 'requirements', label: 'Requirements File', type: 'text', placeholder: 'requirements.txt', mono: true },
+        { key: 'venv', label: 'Use Virtual Env', type: 'toggle' },
+        { key: 'venvDir', label: 'Venv Directory', type: 'text', placeholder: '.venv', mono: true },
+    ],
+});
+
+registerNode({
+    type: 'makeTarget',
+    label: 'Make',
+    icon: '🔨',
+    colorClass: 'from-cyan-600/20 to-cyan-800/10 border-cyan-600/40',
+    headerBgClass: 'bg-cyan-600/30',
+    hoverClass: 'hover:bg-cyan-900/20 hover:border-cyan-600/40 hover:text-cyan-400',
+    executionHandler: 'makeTargetHandler',
+    defaultConfig: { target: 'build', jobs: '4' },
+    configSchema: [
+        { key: 'target', label: 'Make Target', type: 'text', placeholder: 'build', mono: true },
+        { key: 'jobs', label: 'Parallel Jobs (-j)', type: 'text', placeholder: '4' },
+    ],
+});
+
+registerNode({
+    type: 'kubectlApply',
+    label: 'Kubectl Apply',
+    icon: '☸️',
+    colorClass: 'from-sky-600/20 to-sky-800/10 border-sky-600/40',
+    headerBgClass: 'bg-sky-600/30',
+    hoverClass: 'hover:bg-sky-900/20 hover:border-sky-600/40 hover:text-sky-400',
+    executionHandler: 'kubectlApplyHandler',
+    defaultConfig: { manifest: 'k8s/', namespace: 'default', dryRun: false },
+    configSchema: [
+        { key: 'manifest', label: 'Manifest Path', type: 'text', placeholder: 'k8s/deployment.yaml', mono: true },
+        { key: 'namespace', label: 'Namespace', type: 'text', placeholder: 'default' },
+        { key: 'dryRun', label: 'Dry Run', type: 'toggle' },
+    ],
+});
+
+registerNode({
+    type: 'dockerCompose',
+    label: 'Docker Compose',
+    icon: '🐋',
+    colorClass: 'from-blue-500/20 to-blue-700/10 border-blue-500/40',
+    headerBgClass: 'bg-blue-500/30',
+    hoverClass: 'hover:bg-blue-800/20 hover:border-blue-500/40 hover:text-blue-300',
+    executionHandler: 'dockerComposeHandler',
+    defaultConfig: { action: 'up', file: 'docker-compose.yml', detach: true },
+    configSchema: [
+        { key: 'action', label: 'Action', type: 'select', options: ['up', 'down', 'build', 'restart', 'logs', 'ps'] },
+        { key: 'file', label: 'Compose File', type: 'text', placeholder: 'docker-compose.yml', mono: true },
+        { key: 'detach', label: 'Detach (-d)', type: 'toggle' },
+    ],
+});
+
+registerNode({
+    type: 'testRunner',
+    label: 'Test Runner',
+    icon: '🧪',
+    colorClass: 'from-emerald-600/20 to-emerald-800/10 border-emerald-600/40',
+    headerBgClass: 'bg-emerald-600/30',
+    hoverClass: 'hover:bg-emerald-900/20 hover:border-emerald-600/40 hover:text-emerald-400',
+    executionHandler: 'testRunnerHandler',
+    defaultConfig: { framework: 'jest', pattern: '', coverage: false },
+    configSchema: [
+        { key: 'framework', label: 'Framework', type: 'select', options: ['jest', 'pytest', 'go test', 'cargo test', 'mocha', 'vitest'] },
+        { key: 'pattern', label: 'Test Pattern', type: 'text', placeholder: 'src/**/*.test.ts', mono: true },
+        { key: 'coverage', label: 'Generate Coverage', type: 'toggle' },
+    ],
+});
+
+registerNode({
+    type: 'notification',
+    label: 'Send Notification',
+    icon: '🔔',
+    colorClass: 'from-violet-600/20 to-violet-800/10 border-violet-600/40',
+    headerBgClass: 'bg-violet-600/30',
+    hoverClass: 'hover:bg-violet-900/20 hover:border-violet-600/40 hover:text-violet-400',
+    executionHandler: 'notificationHandler',
+    defaultConfig: { title: 'DevFlow', message: 'Step completed!', sound: true },
+    configSchema: [
+        { key: 'title', label: 'Title', type: 'text', placeholder: 'DevFlow' },
+        { key: 'message', label: 'Message', type: 'textarea', placeholder: 'Step completed!' },
+        { key: 'sound', label: 'Play Sound', type: 'toggle' },
+    ],
+});
+
+

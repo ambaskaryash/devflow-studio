@@ -1,5 +1,6 @@
 use tokio::process::Command;
 use std::process::Stdio;
+use std::collections::HashMap;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use std::time::{Instant, Duration};
 use serde::{Deserialize, Serialize};
@@ -28,28 +29,33 @@ pub async fn execute_command(
     node_id: String,
     command: String,
     cwd: Option<String>,
+    env_vars: Option<HashMap<String, String>>,
 ) -> Result<CommandResult, String> {
     let start_time = Instant::now();
 
-    let shell = if cfg!(target_os = "windows") {
-        ("powershell.exe", vec!["-NonInteractive", "-Command"])
-    } else {
-        let shell_env = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-        if shell_env.contains("zsh") {
-            ("zsh", vec!["-c"])
+    let (shell_bin, shell_flag) = {
+        let env_shell = std::env::var("SHELL").unwrap_or_default();
+        if cfg!(target_os = "windows") {
+            ("powershell.exe".to_string(), "-Command".to_string())
+        } else if env_shell.contains("zsh") {
+            (env_shell, "-c".to_string())
         } else {
-            ("bash", vec!["-c"])
+            ("/bin/bash".to_string(), "-c".to_string())
         }
     };
 
-    let mut cmd = Command::new(shell.0);
-    for arg in &shell.1 {
-        cmd.arg(arg);
-    }
-    cmd.arg(&command);
+    let mut cmd = Command::new(&shell_bin);
+    cmd.arg(&shell_flag).arg(&command);
 
-    if let Some(dir) = cwd {
-        cmd.current_dir(&dir);
+    if let Some(dir) = &cwd {
+        cmd.current_dir(dir);
+    }
+
+    // Apply environment variables
+    if let Some(envs) = env_vars {
+        for (k, v) in envs {
+            cmd.env(k, v);
+        }
     }
 
     let mut child = cmd
@@ -62,7 +68,6 @@ pub async fn execute_command(
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
 
-    // Collect stdout lines — try emitting events, fall back to collecting strings
     let app_clone = app.clone();
     let node_id_clone = node_id.clone();
     let stdout_handle = tokio::spawn(async move {
@@ -91,7 +96,6 @@ pub async fn execute_command(
     let mut max_cpu = 0.0f32;
     let mut max_mem = 0u64;
 
-    // Monitor process metrics while it runs
     if let Some(p_id) = pid {
         while let Ok(None) = child.try_wait() {
             sys.refresh_process(Pid::from(p_id));
@@ -112,7 +116,6 @@ pub async fn execute_command(
     let status = child.wait().await.map_err(|e| format!("Failed to wait: {e}"))?;
     let duration = start_time.elapsed().as_millis() as u64;
 
-    // Collect the buffered output
     let stdout_lines = stdout_handle.await.unwrap_or_default();
     let stderr_lines = stderr_handle.await.unwrap_or_default();
 

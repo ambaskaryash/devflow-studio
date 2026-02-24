@@ -3,7 +3,7 @@
 pub mod commands;
 use commands::executor::execute_command;
 use commands::detector::detect_project;
-use commands::folders::pick_folder;
+use commands::folders::{pick_folder, save_flow, load_flow};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -16,6 +16,8 @@ pub fn run() {
             execute_command,
             detect_project,
             pick_folder,
+            save_flow,
+            load_flow,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevFlow Studio");

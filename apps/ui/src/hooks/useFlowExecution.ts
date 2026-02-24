@@ -98,16 +98,71 @@ export function useFlowExecution() {
                         await new Promise(r => setTimeout(r, secs * 1000));
                         nodeSuccess = true;
                     } else {
-                        // Standard Run
+                        // ── Build command from node type ─────────────────────────────────
                         let command = '';
-                        if (node.data.nodeType === 'dockerBuild') command = `docker build -t ${cfg.tag} ${cfg.context}`;
-                        else if (node.data.nodeType === 'dockerRun') command = `docker run ${cfg.image}`;
-                        else if (node.data.nodeType === 'gitPull') command = `git pull ${cfg.remote} ${cfg.branch}`;
-                        else if (node.data.nodeType === 'scriptRun') command = cfg.command as string;
+                        const envVars: Record<string, string> = {};
+
+                        // Collect env vars from node config
+                        if (cfg.envVars && typeof cfg.envVars === 'object') {
+                            for (const [k, v] of Object.entries(cfg.envVars)) {
+                                if (k && v) envVars[k] = String(v);
+                            }
+                        }
+
+                        switch (node.data.nodeType) {
+                            case 'gitPull':
+                                command = `git -C "${cfg.directory || projectPath || '.'}" pull ${cfg.remote || 'origin'} ${cfg.branch || 'main'}`;
+                                break;
+                            case 'dockerBuild':
+                                command = `docker build -t "${cfg.tag || 'myapp:latest'}" -f "${cfg.dockerfile || 'Dockerfile'}" "${cfg.context || '.'}"'`;
+                                command = `docker build -t "${cfg.tag || 'myapp:latest'}" "${cfg.context || '.'}"'`;
+                                command = `docker build -t ${cfg.tag || 'myapp:latest'} ${cfg.context || '.'}`;
+                                break;
+                            case 'dockerRun':
+                                command = `docker run ${cfg.detach ? '-d' : ''} ${cfg.remove ? '--rm' : ''} -p ${cfg.ports || '3000:3000'} ${cfg.image || 'myapp:latest'}`.replace(/\s+/g, ' ').trim();
+                                break;
+                            case 'dockerCompose':
+                                command = `docker compose -f "${cfg.file || 'docker-compose.yml'}" ${cfg.action || 'up'}${cfg.detach ? ' -d' : ''}`;
+                                break;
+                            case 'scriptRun':
+                                command = String(cfg.command || '');
+                                break;
+                            case 'npmRun': {
+                                const dir = cfg.packageDir ? `--prefix "${cfg.packageDir}"` : '';
+                                command = `npm run ${cfg.script || 'build'} ${dir}`.trim();
+                                break;
+                            }
+                            case 'pipInstall':
+                                if (cfg.venv) {
+                                    command = `python -m venv "${cfg.venvDir || '.venv'}" && "${cfg.venvDir || '.venv'}/bin/pip" install -r "${cfg.requirements || 'requirements.txt'}"`;
+                                } else {
+                                    command = `pip install -r "${cfg.requirements || 'requirements.txt'}"`;
+                                }
+                                break;
+                            case 'makeTarget':
+                                command = `make -j${cfg.jobs || 4} ${cfg.target || 'build'}`;
+                                break;
+                            case 'kubectlApply':
+                                command = `kubectl apply -f "${cfg.manifest || 'k8s/'}" -n "${cfg.namespace || 'default'}"${cfg.dryRun ? ' --dry-run=client' : ''}`;
+                                break;
+                            case 'testRunner':
+                                switch (String(cfg.framework)) {
+                                    case 'pytest': command = `pytest ${cfg.pattern || ''} ${cfg.coverage ? '--cov' : ''}`.trim(); break;
+                                    case 'go test': command = 'go test ./...'; break;
+                                    case 'cargo test': command = 'cargo test'; break;
+                                    case 'vitest': command = 'npx vitest run'; break;
+                                    default: command = `npx ${cfg.framework || 'jest'} ${cfg.pattern || ''} ${cfg.coverage ? '--coverage' : ''}`.trim();
+                                }
+                                break;
+                            case 'notification':
+                                addLog({ nodeId, nodeLabel: node.data.label, level: 'info', message: `🔔 ${cfg.title}: ${cfg.message}` });
+                                nodeSuccess = true;
+                                break;
+                        }
 
                         if (command) {
                             const result = await invoke<any>('execute_command', {
-                                nodeId, command, cwd: projectPath
+                                nodeId, command, cwd: projectPath, envVars: Object.keys(envVars).length > 0 ? envVars : null
                             });
 
                             // Pipe collected output into the log panel
@@ -124,7 +179,8 @@ export function useFlowExecution() {
 
                             lastMetrics = { maxCpu: result.max_cpu, maxMemory: result.max_memory_mb };
                             nodeSuccess = result.exit_code === 0;
-                        } else {
+                        } else if (!nodeSuccess) {
+                            // Already handled by notification type or unknown
                             nodeSuccess = true;
                         }
                     }
@@ -175,8 +231,19 @@ export function useFlowExecution() {
         metricService.log('execution', elapsed, { nodeCount: nodes.length });
 
         const allDone = useFlowStore.getState().nodes.every(n => n.data.status === 'success' || n.data.status === 'skipped');
+        const anyFailed = useFlowStore.getState().nodes.some(n => n.data.status === 'error');
         if (allDone) setCheckpoint(null);
         setIsRunning(false);
+
+        // Flow-complete desktop notification
+        if (allDone && !anyFailed) {
+            toast.success(`✅ Flow completed in ${(elapsed / 1000).toFixed(1)}s`, { duration: 5000, icon: '🎉' });
+            if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+                new Notification('DevFlow Studio', { body: `Flow completed in ${(elapsed / 1000).toFixed(1)}s` });
+            }
+        } else if (anyFailed) {
+            toast.error('❌ Flow failed — check the logs', { duration: 6000 });
+        }
     }, [nodes, edges, isRunning, setIsRunning, addLog, updateNodeStatus, clearLogs, startNodeExecution, finishNodeExecution, clearTimeline, setCheckpoint, projectPath]);
 
     return { runFlow, isRunning };
