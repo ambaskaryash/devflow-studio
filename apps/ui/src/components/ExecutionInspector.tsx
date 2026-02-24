@@ -3,7 +3,7 @@
 // Visualizes CPU, RAM, and duration for node executions.
 // ============================================================
 
-import { useFlowStore, type NodeExecutionRecord } from '../store/flowStore.ts';
+import { useFlowStore } from '../store/flowStore.ts';
 import { Cpu, Database, Timer, Activity, Info } from 'lucide-react';
 
 export function ExecutionInspector() {

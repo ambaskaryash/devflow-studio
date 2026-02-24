@@ -4,7 +4,7 @@
 // ============================================================
 
 import { useFlowStore } from '../store/flowStore.ts';
-import { Play, SkipForward, Square, Bug, Pause, Info } from 'lucide-react';
+import { Play, SkipForward, Square, Bug, Info } from 'lucide-react';
 
 export function FlowDebuggerPanel() {
     const {
