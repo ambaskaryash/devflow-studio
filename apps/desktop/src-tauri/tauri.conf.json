@@ -1,7 +1,7 @@
 {
     "$schema": "https://schema.tauri.app/config/2",
     "productName": "DevFlow Studio",
-    "version": "0.1.0",
+    "version": "1.1.0",
     "identifier": "com.devflow.studio",
     "build": {
         "beforeDevCommand": "npm run dev --workspace=@devflow/ui --prefix ../..",
@@ -52,6 +52,15 @@
     "plugins": {
         "shell": {
             "open": true
+        },
+        "updater": {
+            "endpoints": [
+                "https://your-updater-service.com/update/{{target}}/{{current_version}}"
+            ],
+            "pubkey": "CHANGEME_UPDATE_PUBKEY",
+            "windows": {
+                "installMode": "passive"
+            }
         }
     }
 }
