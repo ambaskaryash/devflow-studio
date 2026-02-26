@@ -9,14 +9,16 @@ import { invoke } from '@tauri-apps/api/core';
 import { useFlowStore } from '../store/flowStore.ts';
 import { useProjectStore } from '../store/projectStore.ts';
 import { useAutosave } from '../hooks/useAutosave.ts';
-import { useFlowExecution } from '../hooks/useFlowExecution.ts';
+import { useFlowExecution } from '../hooks/useFlowExecution.tsx';
 import { getAllNodeDefs } from '../lib/nodeRegistry.ts';
 import { validateFlowSafety, type NodeSafetyReport } from '../lib/safetyValidator.ts';
 import { exportAsShellScript } from '../lib/shellExporter.ts';
 import { HistoryModal } from '../components/HistoryModal.tsx';
 import { SafetyModal } from '../components/SafetyModal.tsx';
+import { CIExportModal } from '../components/CIExportModal.tsx';
 import { TemplateModal } from '../components/TemplateModal.tsx';
 import { SecretsPanel } from '../components/SecretsPanel.tsx';
+import { DryRunPanel } from '../components/DryRunPanel.tsx';
 import { toast } from 'react-hot-toast';
 
 import {
@@ -36,6 +38,8 @@ import {
     KeyRound,
     FileCode,
     FolderInput,
+    TerminalSquare,
+    GitBranch
 } from 'lucide-react';
 
 export function Toolbar() {
@@ -56,6 +60,8 @@ export function Toolbar() {
     const [isHistoryOpen, setHistoryOpen] = useState(false);
     const [isTemplateOpen, setTemplateOpen] = useState(false);
     const [isSecretsOpen, setSecretsOpen] = useState(false);
+    const [isDryRunOpen, setDryRunOpen] = useState(false);
+    const [isCIExportOpen, setCIExportOpen] = useState(false);
     const [safetyReports, setSafetyReports] = useState<NodeSafetyReport[]>([]);
 
     // ── Folder Selection ──────────────────────────────────────────────────────
@@ -226,8 +232,8 @@ export function Toolbar() {
 
             <div className="w-px h-6 bg-canvas-border flex-shrink-0" />
 
-            {/* Save/Load to disk + Export script */}
-            <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Save/Load to disk + Export script/CI */}
+            <div className="flex items-center justify-center gap-1 flex-shrink-0">
                 <button onClick={handleSaveToDisk} title="Save flow to disk (.devflow.json)"
                     className="p-1.5 text-green-400/70 hover:bg-green-900/20 hover:text-green-400 rounded-lg transition-all">
                     <FolderInput size={15} />
@@ -236,10 +242,20 @@ export function Toolbar() {
                     className="p-1.5 text-blue-400/70 hover:bg-blue-900/20 hover:text-blue-400 rounded-lg transition-all">
                     <Upload size={15} />
                 </button>
+
+                <div className="w-px h-4 bg-white/10 mx-1" />
+
                 <button onClick={handleExportScript} title="Export flow as shell script (.sh)"
                     className="p-1.5 text-purple-400/70 hover:bg-purple-900/20 hover:text-purple-400 rounded-lg transition-all">
                     <FileCode size={15} />
                 </button>
+                <button onClick={() => setCIExportOpen(true)} title="Export to CI/CD pipelines"
+                    className="p-1.5 text-pink-400/70 hover:bg-pink-900/20 hover:text-pink-400 rounded-lg transition-all">
+                    <GitBranch size={15} />
+                </button>
+
+                <div className="w-px h-4 bg-white/10 mx-1" />
+
                 <button onClick={() => setSecretsOpen(true)} title="Secrets vault"
                     className="p-1.5 text-yellow-400/70 hover:bg-yellow-900/20 hover:text-yellow-400 rounded-lg transition-all">
                     <KeyRound size={15} />
@@ -281,6 +297,22 @@ export function Toolbar() {
                 </button>
             )}
 
+            {/* Retry Failed */}
+            {!isRunning && nodes.some(n => n.data.status === 'error') && (
+                <button onClick={() => handleRun(nodes.find(n => n.data.status === 'error')?.id)}
+                    className="flex items-center gap-2 px-4 py-1.5 rounded-lg font-semibold text-sm transition-all bg-orange-600 hover:bg-orange-500 text-white shadow-lg shadow-orange-500/20 flex-shrink-0">
+                    <History size={14} />
+                    <span>Retry Failed</span>
+                </button>
+            )}
+
+            {/* Dry Run */}
+            <button onClick={() => setDryRunOpen(true)} disabled={nodes.length === 0 || isRunning}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg font-semibold text-sm transition-all border border-dashed border-gray-500 text-gray-300 hover:bg-white/5 flex-shrink-0">
+                <TerminalSquare size={14} />
+                <span className="hidden md:block">Dry Run</span>
+            </button>
+
             {/* Run Flow */}
             <button onClick={() => handleRun()} disabled={nodes.length === 0}
                 className={`flex items-center gap-2 px-4 py-1.5 rounded-lg font-semibold text-sm transition-all flex-shrink-0 ${isRunning ? 'bg-amber-600/20 text-amber-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}>
@@ -293,10 +325,12 @@ export function Toolbar() {
                 isOpen={safetyReports.length > 0}
                 reports={safetyReports}
                 onCancel={() => setSafetyReports([])}
-                onConfirm={executeFlow}
+                onConfirm={() => executeFlow()}
             />
             {isTemplateOpen && <TemplateModal onClose={() => setTemplateOpen(false)} />}
             {isSecretsOpen && <SecretsPanel onClose={() => setSecretsOpen(false)} />}
+            {isDryRunOpen && <DryRunPanel onClose={() => setDryRunOpen(false)} />}
+            <CIExportModal isOpen={isCIExportOpen} onClose={() => setCIExportOpen(false)} />
         </div>
     );
 }

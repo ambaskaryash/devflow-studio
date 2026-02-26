@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import { addEdge, applyNodeChanges, applyEdgeChanges } from 'reactflow';
 import type { Node, Edge, NodeChange, EdgeChange, Connection } from 'reactflow';
 import { getNodeDef } from '../lib/nodeRegistry.ts';
+import { saveFlowVersion as saveVersionToDb } from '../lib/versionRepository.ts';
 
 export type NodeStatus = 'idle' | 'running' | 'success' | 'error' | 'skipped';
 export type DevFlowNodeType = string; // open string — registry-driven
@@ -46,27 +47,8 @@ export interface NodeExecutionRecord {
     maxMemory?: number;
 }
 
-// ─── Version History (localStorage) ───────────────────────────────────────
-export interface FlowVersion {
-    id: string;
-    label: string;
-    snapshotJson: string;
-    createdAt: string;
-}
-
-const VERSIONS_KEY = 'devflow__versions';
+// ─── Constants ───────────────────────────────────────
 const FLOW_ID_KEY = 'devflow__flowId';
-const MAX_VERSIONS = 50;
-
-function loadVersionsFromStorage(): FlowVersion[] {
-    try {
-        return JSON.parse(localStorage.getItem(VERSIONS_KEY) ?? '[]') as FlowVersion[];
-    } catch { return []; }
-}
-
-function saveVersionsToStorage(versions: FlowVersion[]): void {
-    localStorage.setItem(VERSIONS_KEY, JSON.stringify(versions.slice(0, MAX_VERSIONS)));
-}
 
 function loadFlowIdFromStorage(): string {
     const existing = localStorage.getItem(FLOW_ID_KEY);
@@ -94,7 +76,6 @@ interface FlowStore {
     flowId: string;
     flowName: string;
     lastSavedAt: string | null;
-    versions: FlowVersion[];
 
     // Resilience (Phase 3)
     executionCheckpoint: string | null; // ID of the node to resume from
@@ -148,9 +129,8 @@ interface FlowStore {
 
     // Autosave / Version History (Phase 2)
     setFlowName: (name: string) => void;
-    saveVersion: (label?: string) => void;
-    restoreVersion: (versionId: string) => void;
-    deleteVersion: (versionId: string) => void;
+    saveVersion: (label?: string) => Promise<void>;
+    restoreSnapshot: (snapshotJson: string) => void;
     markSaved: () => void;
     getSnapshotJson: () => string;
 }
@@ -167,7 +147,6 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
     flowId: loadFlowIdFromStorage(),
     flowName: 'My Flow',
     lastSavedAt: null,
-    versions: loadVersionsFromStorage(),
     executionCheckpoint: null,
     showAnalytics: false,
     isDebugMode: false,
@@ -345,29 +324,29 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
         return JSON.stringify({ flowName, nodes, edges, exportedAt: new Date().toISOString() }, null, 2);
     },
 
-    saveVersion: (label) => {
-        const { getSnapshotJson } = get();
-        const version: FlowVersion = {
-            id: crypto.randomUUID(),
-            label: label ?? `Snapshot ${new Date().toLocaleTimeString()}`,
-            snapshotJson: getSnapshotJson(),
-            createdAt: new Date().toISOString(),
-        };
-        set(s => {
-            const updated = [version, ...s.versions].slice(0, MAX_VERSIONS);
-            saveVersionsToStorage(updated);
-            return { versions: updated, lastSavedAt: version.createdAt };
-        });
+    saveVersion: async (label) => {
+        const { flowId, getSnapshotJson, nodes } = get();
+        const snapshotJson = getSnapshotJson();
+        const commitMessage = label ?? `Snapshot ${new Date().toLocaleTimeString()}`;
+
+        try {
+            await saveVersionToDb({
+                flowId,
+                snapshotJson,
+                commitMessage,
+                nodeCount: nodes.length
+            });
+            set({ lastSavedAt: new Date().toISOString() });
+        } catch (err) {
+            console.error("Failed to save version to DB:", err);
+        }
     },
 
     markSaved: () => set({ lastSavedAt: new Date().toISOString() }),
 
-    restoreVersion: (versionId) => {
-        const { versions } = get();
-        const v = versions.find(x => x.id === versionId);
-        if (!v) return;
+    restoreSnapshot: (snapshotJson: string) => {
         try {
-            const parsed = JSON.parse(v.snapshotJson) as { nodes: Node<DevFlowNodeData>[]; edges: Edge[]; flowName?: string };
+            const parsed = JSON.parse(snapshotJson) as { nodes: Node<DevFlowNodeData>[]; edges: Edge[]; flowName?: string };
             set({
                 nodes: parsed.nodes ?? [],
                 edges: parsed.edges ?? [],
@@ -376,11 +355,5 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
                 executionTimeline: [],
             });
         } catch { /* ignore bad snapshots */ }
-    },
-
-    deleteVersion: (versionId) => set(s => {
-        const updated = s.versions.filter(v => v.id !== versionId);
-        saveVersionsToStorage(updated);
-        return { versions: updated };
-    }),
+    }
 }));

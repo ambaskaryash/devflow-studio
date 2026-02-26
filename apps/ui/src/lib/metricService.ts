@@ -48,7 +48,7 @@ export const metricService = {
     /** Aggregates metrics (e.g., average startup time) */
     getAverages: () => {
         const history = metricService.getHistory();
-        const stats: Record<string, { total: number; count: number }> = {};
+        const stats: Record<string, { total: number; count: number }> = Object.create(null);
 
         history.forEach(m => {
             if (!stats[m.type]) stats[m.type] = { total: 0, count: 0 };

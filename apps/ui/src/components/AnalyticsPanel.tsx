@@ -54,6 +54,31 @@ export function AnalyticsPanel() {
                     </div>
                 </div>
 
+                {/* Resource Usage Graph */}
+                <section>
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <Activity size={14} className="opacity-50" />
+                        Resource Usage Profile
+                    </h3>
+                    <div className="bg-canvas-elevated/30 p-4 rounded-xl border border-canvas-border/50 h-32 flex items-end gap-1">
+                        {timeline.slice(-30).map((r, i) => {
+                            const cpuH = Math.min(100, Math.max(2, r.maxCpu ?? 0));
+                            const memH = Math.min(100, Math.max(2, ((r.maxMemory ?? 0) / 1024) * 100)); // rough scaling
+                            return (
+                                <div key={i} className="flex-1 flex flex-col justify-end gap-0.5 group relative" title={`Node: ${r.nodeLabel}\nCPU: ${(r.maxCpu || 0).toFixed(1)}%\nMem: ${(r.maxMemory || 0).toFixed(1)}MB`}>
+                                    <div className="w-full bg-blue-500/50 rounded-t-sm transition-all group-hover:bg-blue-400" style={{ height: `${cpuH}%` }} />
+                                    <div className="w-full bg-purple-500/50 rounded-b-sm transition-all group-hover:bg-purple-400" style={{ height: `${memH}%` }} />
+                                </div>
+                            );
+                        })}
+                        {timeline.length === 0 && <div className="text-xs text-gray-500 w-full text-center pb-8 flex-col items-center">No timeline data</div>}
+                    </div>
+                    <div className="flex justify-between items-center mt-2 px-1 text-[9px] text-gray-500 font-mono">
+                        <div className="flex items-center gap-2"><div className="w-2 h-2 bg-blue-500/50 rounded-sm" /> CPU %</div>
+                        <div className="flex items-center gap-2"><div className="w-2 h-2 bg-purple-500/50 rounded-sm" /> Memory MB</div>
+                    </div>
+                </section>
+
                 {/* Performance Table */}
                 <section>
                     <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -62,16 +87,19 @@ export function AnalyticsPanel() {
                     </h3>
                     <div className="space-y-3">
                         {analytics.map(node => (
-                            <div key={node.nodeId} className="bg-canvas-elevated/30 p-3 rounded-lg border border-canvas-border/50 hover:bg-canvas-elevated/60 transition-all">
+                            <div key={node.nodeId} className={`bg-canvas-elevated/30 p-3 rounded-lg border transition-all ${node.isBottleneck ? 'border-amber-500/50 bg-amber-500/5' : 'border-canvas-border/50 hover:bg-canvas-elevated/60'}`}>
                                 <div className="flex justify-between items-center mb-2">
-                                    <span className="text-xs font-medium text-gray-300">#{node.nodeId.slice(0, 8)}</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-medium text-gray-300">#{node.nodeId.slice(0, 8)}</span>
+                                        {node.isBottleneck && <span className="text-[9px] bg-amber-500/20 text-amber-500 px-1.5 py-0.5 rounded border border-amber-500/30">BOTTLENECK</span>}
+                                    </div>
                                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${node.successRate > 90 ? 'bg-green-500/10 text-green-400' : 'bg-amber-500/10 text-amber-400'}`}>
                                         {node.successRate.toFixed(0)}% Success
                                     </span>
                                 </div>
                                 <div className="grid grid-cols-2 gap-2 text-[10px]">
-                                    <div className="text-gray-500 italic">Avg: {(node.avgDurationMs / 1000).toFixed(1)}s</div>
-                                    <div className="text-blue-400/80">Peak: {node.maxCpu.toFixed(1)}% CPU</div>
+                                    <div className={`italic ${node.isBottleneck ? 'text-amber-400/80 font-bold' : 'text-gray-500'}`}>Avg: {(node.avgDurationMs / 1000).toFixed(1)}s (p95: {(node.p95DurationMs / 1000).toFixed(1)}s)</div>
+                                    <div className="text-blue-400/80">Peak: {node.maxCpu.toFixed(1)}% CPU | {node.maxMemory.toFixed(0)}MB</div>
                                 </div>
                             </div>
                         ))}

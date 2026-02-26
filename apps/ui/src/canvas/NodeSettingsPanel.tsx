@@ -139,7 +139,7 @@ export function NodeSettingsPanel() {
     return (
         <div className="w-64 flex flex-col border-l border-canvas-border bg-canvas-surface animate-slide-in">
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-canvas-border">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-canvas-border shrink-0">
                 <div className="flex items-center gap-2">
                     <span className="text-base">{def?.icon || '🔌'}</span>
                     <span className="text-sm font-semibold text-white">{selectedNode.data.label}</span>
@@ -153,81 +153,144 @@ export function NodeSettingsPanel() {
             </div>
 
             {/* Node ID */}
-            <div className="px-4 pt-3">
-                <p className="text-xs text-gray-600 font-mono">ID: {selectedNode.id}</p>
+            <div className="px-4 pt-3 shrink-0">
+                <p className="text-xs text-gray-600 font-mono text-center">ID: {selectedNode.id}</p>
             </div>
 
             {/* Dynamic Config fields from Registry */}
-            <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-4 no-scrollbar">
-                {def?.configSchema.map(field => {
-                    const value = cfg[field.key];
+            <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-6 no-scrollbar">
+                <div className="flex flex-col gap-4">
+                    {def?.configSchema.map(field => {
+                        const value = cfg[field.key];
 
-                    if (field.type === 'text') {
-                        let displayValue = '';
-                        if (Array.isArray(value)) displayValue = value.join(', ');
-                        else displayValue = String(value ?? '');
+                        if (field.type === 'text') {
+                            let displayValue = '';
+                            if (Array.isArray(value)) displayValue = value.join(', ');
+                            else displayValue = String(value ?? '');
 
-                        return (
-                            <TextInput
-                                key={field.key}
-                                label={field.label}
-                                value={displayValue}
-                                placeholder={field.placeholder}
-                                mono={field.mono}
-                                onChange={v => {
-                                    // Special handling for ports (comma separated)
-                                    if (field.key === 'ports') {
-                                        update(field.key, v.split(',').map(s => s.trim()).filter(Boolean));
-                                    } else {
-                                        update(field.key, v);
-                                    }
-                                }}
-                            />
-                        );
-                    }
+                            return (
+                                <TextInput
+                                    key={field.key}
+                                    label={field.label}
+                                    value={displayValue}
+                                    placeholder={field.placeholder}
+                                    mono={field.mono}
+                                    onChange={v => {
+                                        // Special handling for ports (comma separated)
+                                        if (field.key === 'ports') {
+                                            update(field.key, v.split(',').map(s => s.trim()).filter(Boolean));
+                                        } else {
+                                            update(field.key, v);
+                                        }
+                                    }}
+                                />
+                            );
+                        }
 
-                    if (field.type === 'textarea') {
-                        return (
-                            <TextArea
-                                key={field.key}
-                                label={field.label}
-                                value={String(value ?? '')}
-                                placeholder={field.placeholder}
-                                mono={field.mono}
-                                onChange={v => update(field.key, v)}
-                            />
-                        );
-                    }
+                        if (field.type === 'textarea') {
+                            return (
+                                <TextArea
+                                    key={field.key}
+                                    label={field.label}
+                                    value={String(value ?? '')}
+                                    placeholder={field.placeholder}
+                                    mono={field.mono}
+                                    onChange={v => update(field.key, v)}
+                                />
+                            );
+                        }
 
-                    if (field.type === 'toggle') {
-                        return (
-                            <Toggle
-                                key={field.key}
-                                label={field.label}
-                                checked={!!value}
-                                onChange={v => update(field.key, v)}
-                            />
-                        );
-                    }
+                        if (field.type === 'toggle') {
+                            return (
+                                <Toggle
+                                    key={field.key}
+                                    label={field.label}
+                                    checked={!!value}
+                                    onChange={v => update(field.key, v)}
+                                />
+                            );
+                        }
 
-                    if (field.type === 'select') {
-                        return (
-                            <SelectInput
-                                key={field.key}
-                                label={field.label}
-                                value={String(value ?? 'auto')}
-                                options={field.options || []}
-                                onChange={v => update(field.key, v)}
-                            />
-                        );
-                    }
+                        if (field.type === 'select') {
+                            return (
+                                <SelectInput
+                                    key={field.key}
+                                    label={field.label}
+                                    value={String(value ?? 'auto')}
+                                    options={field.options || []}
+                                    onChange={v => update(field.key, v)}
+                                />
+                            );
+                        }
 
-                    return null;
-                })}
+                        return null;
+                    })}
+                </div>
+
+                {/* ── Retry Policy ── */}
+                <div className="pt-4 border-t border-canvas-border flex flex-col gap-3">
+                    <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1.5"><span className="text-yellow-500">↺</span> Retry Policy</h3>
+
+                    <SelectInput
+                        label="Strategy"
+                        value={(cfg.retryPolicy as any)?.strategy || 'none'}
+                        options={['none', 'auto', 'exponential', 'manual']}
+                        onChange={v => update('retryPolicy', { ...(cfg.retryPolicy as any), strategy: v })}
+                    />
+
+                    {['auto', 'exponential'].includes((cfg.retryPolicy as any)?.strategy) && (
+                        <TextInput
+                            label="Max Attempts"
+                            value={String((cfg.retryPolicy as any)?.maxAttempts ?? 2)}
+                            onChange={v => update('retryPolicy', { ...(cfg.retryPolicy as any), maxAttempts: parseInt(v) || 0 })}
+                        />
+                    )}
+
+                    {((cfg.retryPolicy as any)?.strategy === 'exponential') && (
+                        <TextInput
+                            label="Base Backoff (ms)"
+                            value={String((cfg.retryPolicy as any)?.backoffMs ?? 1000)}
+                            onChange={v => update('retryPolicy', { ...(cfg.retryPolicy as any), backoffMs: parseInt(v) || 1000 })}
+                        />
+                    )}
+                </div>
+
+                {/* ── Execution Profile ── */}
+                <div className="pt-4 border-t border-canvas-border flex flex-col gap-3">
+                    <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1.5"><span className="text-blue-400">⚡</span> Execution Profile</h3>
+
+                    <SelectInput
+                        label="Sandbox Environment"
+                        value={(cfg.executionProfile as any)?.profile || 'native'}
+                        options={['native', 'docker', 'ssh']}
+                        onChange={v => update('executionProfile', { ...(cfg.executionProfile as any), profile: v })}
+                    />
+
+                    <TextInput
+                        label="Timeout (seconds)"
+                        value={String((cfg.executionProfile as any)?.timeoutSeconds ?? 300)}
+                        onChange={v => update('executionProfile', { ...(cfg.executionProfile as any), timeoutSeconds: parseInt(v) || 300 })}
+                    />
+
+                    {((cfg.executionProfile as any)?.profile === 'docker') && (
+                        <>
+                            <TextInput label="Docker Image" placeholder="ubuntu:22.04" value={(cfg.executionProfile as any)?.dockerImage || ''} onChange={v => update('executionProfile', { ...(cfg.executionProfile as any), dockerImage: v })} />
+                            <TextInput label="CPU Limit (e.g. 0.5)" placeholder="no limit" value={(cfg.executionProfile as any)?.cpuLimit || ''} onChange={v => update('executionProfile', { ...(cfg.executionProfile as any), cpuLimit: v })} />
+                            <TextInput label="Mem Limit (e.g. 512m)" placeholder="no limit" value={(cfg.executionProfile as any)?.memLimit || ''} onChange={v => update('executionProfile', { ...(cfg.executionProfile as any), memLimit: v })} />
+                        </>
+                    )}
+
+                    {((cfg.executionProfile as any)?.profile === 'ssh') && (
+                        <>
+                            <TextInput label="SSH User" placeholder="root" value={(cfg.executionProfile as any)?.sshUser || ''} onChange={v => update('executionProfile', { ...(cfg.executionProfile as any), sshUser: v })} />
+                            <TextInput label="SSH Host" placeholder="example.com" value={(cfg.executionProfile as any)?.sshHost || ''} onChange={v => update('executionProfile', { ...(cfg.executionProfile as any), sshHost: v })} />
+                        </>
+                    )}
+                </div>
             </div>
 
             {/* Delete button */}
-            <div className="px-4 py-3 border-t border-canvas-border">
+            <div className="px-4 py-3 border-t border-canvas-border shrink-0">
                 <button
                     onClick={() => removeNode(selectedNode.id)}
                     className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-red-900/20 border border-red-800/40 text-red-400 hover:bg-red-900/40 hover:text-red-300 transition-all text-sm font-medium"

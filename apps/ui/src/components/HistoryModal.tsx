@@ -3,13 +3,12 @@
 // UI for viewing and restoring flow version snapshots.
 // ============================================================
 
-import { X, RotateCcw, Trash2, History } from 'lucide-react';
-import { useFlowStore } from '../store/flowStore.ts';
+import { useState } from 'react';
+import { X, History, GitCommit } from 'lucide-react';
+import { FlowVersionPanel } from './FlowVersionPanel.tsx';
 
 export function HistoryModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-    const versions = useFlowStore(s => s.versions);
-    const restoreVersion = useFlowStore(s => s.restoreVersion);
-    const deleteVersion = useFlowStore(s => s.deleteVersion);
+    const [activeTab, setActiveTab] = useState<'executions' | 'versions'>('versions');
 
     if (!isOpen) return null;
 
@@ -27,45 +26,31 @@ export function HistoryModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
                     </button>
                 </div>
 
-                {/* List */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-2 no-scrollbar">
-                    {versions.length === 0 ? (
-                        <div className="py-12 text-center text-gray-600 italic">
-                            No versions saved yet. Autosave will create snapshots as you build.
-                        </div>
-                    ) : (
-                        versions.map(v => (
-                            <div key={v.id} className="group p-3 rounded-xl border border-canvas-border bg-canvas-surface/30 hover:bg-canvas-surface transition-all flex items-center gap-3">
-                                <div className="flex-1 min-w-0">
-                                    <div className="text-sm font-semibold text-gray-200 truncate">{v.label}</div>
-                                    <div className="text-[10px] text-gray-500 font-mono">
-                                        {new Date(v.createdAt).toLocaleString()}
-                                    </div>
-                                </div>
-
-                                <button
-                                    onClick={() => { restoreVersion(v.id); onClose(); }}
-                                    title="Restore this version"
-                                    className="p-2 rounded-lg bg-blue-600/10 text-blue-400 hover:bg-blue-600 hover:text-white transition-all opacity-0 group-hover:opacity-100"
-                                >
-                                    <RotateCcw size={14} />
-                                </button>
-
-                                <button
-                                    onClick={() => deleteVersion(v.id)}
-                                    title="Delete version"
-                                    className="p-2 rounded-lg bg-red-600/10 text-red-500/70 hover:bg-red-600 hover:text-white transition-all opacity-0 group-hover:opacity-100"
-                                >
-                                    <Trash2 size={14} />
-                                </button>
-                            </div>
-                        ))
-                    )}
+                {/* Tabs */}
+                <div className="flex px-4 border-b border-canvas-border bg-canvas-surface/30">
+                    <button
+                        onClick={() => setActiveTab('versions')}
+                        className={`py-2 px-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'versions' ? 'border-blue-500 text-blue-400' : 'border-transparent text-gray-400 hover:text-gray-200'}`}
+                    >
+                        <GitCommit size={14} /> Flow Versions
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('executions')}
+                        className={`py-2 px-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'executions' ? 'border-blue-500 text-blue-400' : 'border-transparent text-gray-400 hover:text-gray-200'}`}
+                    >
+                        <History size={14} /> Execution Runs
+                    </button>
                 </div>
 
-                {/* Footer */}
-                <div className="px-5 py-3 bg-canvas-surface/50 border-t border-canvas-border text-[10px] text-gray-500 text-center">
-                    Last 50 versions are stored locally. Restoring will replace the current canvas.
+                {/* Content */}
+                <div className="flex-1 overflow-hidden p-2">
+                    {activeTab === 'versions' ? (
+                        <FlowVersionPanel />
+                    ) : (
+                        <div className="py-12 text-center text-gray-600 italic text-sm px-4">
+                            Execution run history tracking is coming soon.
+                        </div>
+                    )}
                 </div>
             </div>
             <div className="absolute inset-0 -z-10" onClick={onClose} />

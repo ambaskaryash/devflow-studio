@@ -6,6 +6,10 @@
 import { readDir, readTextFile } from '@tauri-apps/plugin-fs';
 import { join, homeDir } from '@tauri-apps/api/path';
 import { registerNode, type NodeDefinition } from '../lib/nodeRegistry.ts';
+import { validatePlugin } from './pluginValidator.ts';
+import { toast } from 'react-hot-toast';
+
+const CORE_VERSION = '1.0.0';
 
 export async function initializePlugins() {
     // Guard: Only run inside Tauri environment
@@ -33,9 +37,11 @@ async function loadPlugin(path: string) {
         const manifestStr = await readTextFile(await join(path, 'plugin.json'));
         const manifest = JSON.parse(manifestStr);
 
-        // Phase 4: Manifest Validation
-        if (!manifest.id || !manifest.name || !manifest.version) {
-            console.warn(`[PluginService] Invalid manifest at ${path}. Missing id, name, or version.`);
+        // Phase 10: Manifest Validation Hardening
+        const validation = await validatePlugin(manifest, CORE_VERSION);
+        if (!validation.isValid) {
+            console.warn(`[PluginService] Validation failed for ${path}: ${validation.error}`);
+            toast.error(`Plugin "${manifest.name || path}" disabled: ${validation.error}`);
             return;
         }
 
@@ -44,16 +50,21 @@ async function loadPlugin(path: string) {
         // Register the nodes defined in the plugin
         if (manifest.nodes && Array.isArray(manifest.nodes)) {
             for (const nodeDef of manifest.nodes) {
-                // Prevent duplicate types
-                const { isNodeRegistered } = await import('../lib/nodeRegistry.ts');
-                if (isNodeRegistered(nodeDef.type)) {
-                    console.warn(`[PluginService] Node type "${nodeDef.type}" is already registered. Skipping.`);
-                    continue;
+                try {
+                    // Prevent duplicate types
+                    const { isNodeRegistered } = await import('../lib/nodeRegistry.ts');
+                    if (isNodeRegistered(nodeDef.type)) {
+                        console.warn(`[PluginService] Node type "${nodeDef.type}" is already registered. Skipping.`);
+                        continue;
+                    }
+                    registerNode(nodeDef as NodeDefinition);
+                } catch (nodeErr) {
+                    console.error(`[PluginService] Error registering node ${nodeDef.type} from plugin ${manifest.name}:`, nodeErr);
                 }
-                registerNode(nodeDef as NodeDefinition);
             }
         }
     } catch (err) {
         console.error(`[PluginService] Failed to load plugin at ${path}:`, err);
+        toast.error(`Failed to load plugin at ${path}`);
     }
 }

@@ -1,15 +1,17 @@
 // ============================================================
-// DevFlow Studio — Flow Execution Hook (Phase 3)
-// Shared logic for running, retrying, and resuming flows.
+// DevFlow Studio — Flow Execution Hook (Phase 3+5)
+// Logic for running, retrying, and resuming flows.
+// Integrates retry strategies, execution profiles, and secure secrets.
 // ============================================================
 
 import { useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useFlowStore } from '../store/flowStore.ts';
 import { useProjectStore } from '../store/projectStore.ts';
-import { safeExecute } from '../lib/SafeExecutor.ts';
 import { toast } from 'react-hot-toast';
 import { metricService } from '../lib/metricService.ts';
+import { retryWithPolicy, waitForCondition } from '../lib/retryStrategy.ts';
+import { DEFAULT_RETRY_POLICY } from '../lib/errorTypes.ts';
 
 export function useFlowExecution() {
     const {
@@ -51,15 +53,13 @@ export function useFlowExecution() {
             await Promise.all(currentBatch.map(async (nodeId) => {
                 const node = nodes.find(n => n.id === nodeId)!;
 
-                // Phase 4: Debugger Pause Logic
+                // Debugger Logic
                 const s = useFlowStore.getState();
                 if (s.isDebugMode) {
                     useFlowStore.setState({ isPaused: true, currentDebugNodeId: nodeId });
-                    // Wait until isPaused becomes false
                     while (useFlowStore.getState().isPaused && useFlowStore.getState().isDebugMode) {
                         await new Promise(r => setTimeout(r, 100));
                     }
-                    // Reset current debug node if we stopped debugging
                     if (!useFlowStore.getState().isDebugMode) {
                         useFlowStore.setState({ currentDebugNodeId: null });
                         return;
@@ -68,7 +68,6 @@ export function useFlowExecution() {
 
                 const nodeInStore = useFlowStore.getState().nodes.find(n => n.id === nodeId);
                 if (nodeInStore?.data.status === 'skipped' || (resumeNodeId && nodeInStore?.data.status === 'success' && nodeId !== resumeNodeId)) {
-                    // Decrement neighbors for skipped/already success
                     for (const neighbor of adj_fixed[nodeId]) {
                         inDeg_fixed[neighbor]--;
                         if (inDeg_fixed[neighbor] === 0) queue.push(neighbor);
@@ -78,11 +77,10 @@ export function useFlowExecution() {
 
                 updateNodeStatus(nodeId, 'running');
                 startNodeExecution(nodeId, node.data.label, node.data.nodeType);
-                addLog({ nodeId, nodeLabel: node.data.label, level: 'info', message: `Starting ${node.data.label}...` });
 
-                // Wrapped execution logic
-                const executionPromise = async () => {
-                    const cfg = node.data.config;
+                // ── The core execution promise that retryWithPolicy will run ──
+                const executionAttempt = async () => {
+                    const cfg = node.data.config as Record<string, any>;
                     let lastMetrics = { maxCpu: 0, maxMemory: 0 };
                     let nodeSuccess = false;
 
@@ -91,21 +89,35 @@ export function useFlowExecution() {
 
                     if (typeof handler === 'function') {
                         const result = await handler(cfg, { projectPath, nodeId });
-                        nodeSuccess = result.success;
                         lastMetrics = result.metrics || lastMetrics;
+                        if (!result.success) throw new Error(result.error || 'Plugin node failed');
+                        nodeSuccess = true;
                     } else if (node.data.nodeType === 'delayNode') {
                         const secs = Number(cfg.seconds) || 5;
                         await new Promise(r => setTimeout(r, secs * 1000));
                         nodeSuccess = true;
                     } else {
-                        // ── Build command from node type ─────────────────────────────────
+                        // Build shell command
                         let command = '';
                         const envVars: Record<string, string> = {};
 
-                        // Collect env vars from node config
+                        // Inject env vars and resolve secrets
                         if (cfg.envVars && typeof cfg.envVars === 'object') {
                             for (const [k, v] of Object.entries(cfg.envVars)) {
-                                if (k && v) envVars[k] = String(v);
+                                if (k && typeof v === 'string') {
+                                    if (v.startsWith('$SECRET_')) {
+                                        const secretKey = v.replace('$SECRET_', '');
+                                        try {
+                                            const secretVal = await invoke<string | null>('get_secret', { key: secretKey });
+                                            if (secretVal) envVars[k] = secretVal;
+                                            else throw new Error(`Secret ${secretKey} not found in OS keychain`);
+                                        } catch (err) {
+                                            throw new Error(`Failed to inject secret ${secretKey}: ${err}`);
+                                        }
+                                    } else {
+                                        envVars[k] = String(v);
+                                    }
+                                }
                             }
                         }
 
@@ -114,8 +126,6 @@ export function useFlowExecution() {
                                 command = `git -C "${cfg.directory || projectPath || '.'}" pull ${cfg.remote || 'origin'} ${cfg.branch || 'main'}`;
                                 break;
                             case 'dockerBuild':
-                                command = `docker build -t "${cfg.tag || 'myapp:latest'}" -f "${cfg.dockerfile || 'Dockerfile'}" "${cfg.context || '.'}"'`;
-                                command = `docker build -t "${cfg.tag || 'myapp:latest'}" "${cfg.context || '.'}"'`;
                                 command = `docker build -t ${cfg.tag || 'myapp:latest'} ${cfg.context || '.'}`;
                                 break;
                             case 'dockerRun':
@@ -162,10 +172,20 @@ export function useFlowExecution() {
 
                         if (command) {
                             const result = await invoke<any>('execute_command', {
-                                nodeId, command, cwd: projectPath, envVars: Object.keys(envVars).length > 0 ? envVars : null
+                                nodeId, command, cwd: projectPath, envVars: Object.keys(envVars).length > 0 ? envVars : null,
+                                timeout_seconds: cfg.executionProfile?.timeoutSeconds ?? 300,
+                                profile: cfg.executionProfile?.profile ?? 'native',
+                                docker_config: cfg.executionProfile?.profile === 'docker' ? {
+                                    image: cfg.executionProfile.dockerImage,
+                                    cpu_limit: cfg.executionProfile.cpuLimit,
+                                    mem_limit: cfg.executionProfile.memLimit
+                                } : undefined,
+                                ssh_config: cfg.executionProfile?.profile === 'ssh' ? {
+                                    host: cfg.executionProfile.sshHost,
+                                    user: cfg.executionProfile.sshUser
+                                } : undefined
                             });
 
-                            // Pipe collected output into the log panel
                             if (result.stdout) {
                                 result.stdout.split('\n').filter(Boolean).forEach((line: string) =>
                                     addLog({ nodeId, nodeLabel: node.data.label, level: 'stdout', message: line })
@@ -178,16 +198,61 @@ export function useFlowExecution() {
                             }
 
                             lastMetrics = { maxCpu: result.max_cpu, maxMemory: result.max_memory_mb };
-                            nodeSuccess = result.exit_code === 0;
-                        } else if (!nodeSuccess) {
-                            // Already handled by notification type or unknown
+
+                            if (result.exit_code !== 0) {
+                                const errorReason = result.timed_out ? 'Command timed out' : `Exit code ${result.exit_code}`;
+                                throw new Error(`${errorReason}\n${result.stderr || result.stdout}`);
+                            }
                             nodeSuccess = true;
                         }
                     }
+
+                    if (!nodeSuccess) throw new Error("Execution failed");
                     return { nodeSuccess, lastMetrics };
                 };
 
-                const result = await safeExecute(executionPromise, `Node(${node.data.label})`);
+                // ── Run with Retry Policy ──
+                const policy = (node.data.config.retryPolicy as any) || DEFAULT_RETRY_POLICY;
+
+                const result = await retryWithPolicy(
+                    executionAttempt,
+                    policy,
+                    { nodeId, nodeLabel: node.data.label },
+                    (attempt) => {
+                        const msg = attempt > 1 ? `Retry attempt ${attempt}...` : `Starting ${node.data.label}...`;
+                        addLog({ nodeId, nodeLabel: node.data.label, level: 'info', message: msg });
+
+                        // Wait for manual confirmation if needed
+                        if (attempt > 1 && policy.strategy === 'manual') {
+                            toast.loading(
+                                (t) => (
+                                    <span className="flex items-center gap-2" >
+                                        {node.data.label} failed.
+                                        < button onClick={() => { toast.dismiss(t.id); (window as any)[`__retry_${nodeId}`] = true; }
+                                        }
+                                            className="bg-blue-600 text-white px-2 py-1 rounded text-xs ml-2" > Retry Now </button>
+                                        < button onClick={() => { toast.dismiss(t.id); (window as any)[`__retry_${nodeId}_cancel`] = true; }}
+                                            className="bg-gray-600 text-white px-2 py-1 rounded text-xs" > Cancel </button>
+                                    </span>
+                                ),
+                                { id: `manual_retry_${nodeId}`, duration: Infinity }
+                            );
+
+                            // Return a promise that resolves when user clicks
+                            return waitForCondition(() => {
+                                if ((window as any)[`__retry_${nodeId}`]) {
+                                    delete (window as any)[`__retry_${nodeId}`];
+                                    return true;
+                                }
+                                if ((window as any)[`__retry_${nodeId}_cancel`]) {
+                                    delete (window as any)[`__retry_${nodeId}_cancel`];
+                                    throw new Error("Manual retry cancelled");
+                                }
+                                return false;
+                            });
+                        }
+                    }
+                );
 
                 if (result.success && result.data?.nodeSuccess) {
                     updateNodeStatus(nodeId, 'success');
@@ -200,9 +265,9 @@ export function useFlowExecution() {
                         maxMemory: result.data.lastMetrics.maxMemory
                     });
                 } else {
-                    const errorMsg = result.error || 'Execution failed';
+                    const errorMsg = result.error?.message || 'Execution failed';
                     updateNodeStatus(nodeId, 'error');
-                    finishNodeExecution(nodeId, 'error', result.data?.lastMetrics);
+                    finishNodeExecution(nodeId, 'error', undefined);
                     setCheckpoint(nodeId);
 
                     toast.error(`${node.data.label} failed: ${errorMsg}`, { id: nodeId });

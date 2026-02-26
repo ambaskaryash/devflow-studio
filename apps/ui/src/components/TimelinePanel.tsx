@@ -5,7 +5,7 @@
 
 import { useFlowStore, type NodeExecutionRecord } from '../store/flowStore.ts';
 import { getNodeDef } from '../lib/nodeRegistry.ts';
-import { useFlowExecution } from '../hooks/useFlowExecution.ts';
+import { useFlowExecution } from '../hooks/useFlowExecution.tsx';
 import { Clock, CheckCircle2, XCircle, PlayCircle, MinusCircle, RotateCcw } from 'lucide-react';
 
 function TimelinePill({ record }: { record: NodeExecutionRecord }) {
