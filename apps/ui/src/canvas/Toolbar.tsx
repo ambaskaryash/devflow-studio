@@ -19,6 +19,7 @@ import { CIExportModal } from '../components/CIExportModal.tsx';
 import { TemplateModal } from '../components/TemplateModal.tsx';
 import { SecretsPanel } from '../components/SecretsPanel.tsx';
 import { DryRunPanel } from '../components/DryRunPanel.tsx';
+import { UpdateChecker } from '../components/UpdateChecker.tsx';
 import { toast } from 'react-hot-toast';
 
 import {
@@ -229,6 +230,10 @@ export function Toolbar() {
                 title="Save snapshot">
                 <Save size={14} />
             </button>
+
+            <div className="w-px h-6 bg-canvas-border flex-shrink-0 mx-1" />
+
+            <UpdateChecker />
 
             <div className="w-px h-6 bg-canvas-border flex-shrink-0" />
 
