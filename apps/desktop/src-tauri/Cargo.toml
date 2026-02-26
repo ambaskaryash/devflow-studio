@@ -1,6 +1,6 @@
 [package]
 name = "devflow-studio"
-version = "1.1.0"
+version = "1.1.1"
 description = "DevFlow Studio — Cross-Platform Visual DevOps Workflow Builder"
 authors = ["DevFlow Studio"]
 edition = "2021"
